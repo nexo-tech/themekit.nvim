@@ -172,7 +172,7 @@ function M.format_complex_value(value)
     return tostring(value)
 end
 
-function M.setup_theme_check_command()
+function M.setup_command()
     vim.api.nvim_create_user_command('ThemeCheck', function(opts)
         local theme_name = opts.args
         if theme_name == "" then

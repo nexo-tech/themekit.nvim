@@ -60,6 +60,17 @@ Plug 'your-username/themekit.nvim'
 
 ### Commands
 
+#### Theme Picker
+```vim
+:ThemePicker
+```
+Opens a beautiful floating window to browse and select themes interactively. Features:
+- 🎨 Telescope-like interface with smooth navigation
+- ⌨️ Intuitive keyboard shortcuts (j/k, <CR>, <Esc>)
+- 🎯 Visual selection indicator with arrow cursor
+- 📊 Shows number of available themes
+- ⚡ Instant theme application
+
 #### Apply a Theme
 ```vim
 :ThemeApply <theme_name>
