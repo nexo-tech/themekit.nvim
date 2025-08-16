@@ -90,4 +90,14 @@ function M.list_available_themes()
     return theme_names
 end
 
+
+function M.find_theme_index(theme_name)
+    local theme_names = M.list_available_themes()
+    for i, name in ipairs(theme_names) do
+        if name == theme_name then
+            return i
+        end
+    end
+end
+
 return M

@@ -28,7 +28,8 @@ local state = {
     window_id = nil,
     buffer_id = nil,
     is_open = false,
-    preview_mode = false
+    preview_mode = false,
+    original_theme = nil
 }
 
 -- Utility functions
@@ -110,6 +111,14 @@ local function create_window()
     vim.api.nvim_win_set_option(state.window_id, "foldcolumn", "0")
     vim.api.nvim_win_set_option(state.window_id, "list", false)
     vim.api.nvim_win_set_option(state.window_id, "wrap", false)
+    vim.api.nvim_win_set_option(state.window_id, "cursorcolumn", false)
+    
+    -- Hide cursor completely
+    vim.api.nvim_win_set_option(state.window_id, "cursorline", false)
+    vim.api.nvim_win_set_option(state.window_id, "cursorcolumn", false)
+    
+    -- Set cursor to invisible
+    vim.api.nvim_win_set_option(state.window_id, "guicursor", "a:blinkon0")
     
     state.is_open = true
 end
@@ -125,6 +134,7 @@ local function close_window()
     state.buffer_id = nil
     state.is_open = false
     state.selected_index = 1
+    state.original_theme = nil
 end
 
 local function render_content()
@@ -176,7 +186,7 @@ local function render_content()
     table.insert(highlights, { "ThemePickerComment", #lines - 1, 0, -1 })
     table.insert(lines, "┌─ Navigation ──────────────────────────────────────────┐")
     table.insert(highlights, { "ThemePickerComment", #lines, 0, -1 })
-    table.insert(lines, "│ <CR>/<Space>/l Apply │ p Preview │ <Esc>/q/h Cancel │")
+    table.insert(lines, "│ <CR>/<Space>/l Apply │ <C-p>/<C-n> Navigate │ <Esc>/q/h Cancel │")
     table.insert(highlights, { "ThemePickerComment", #lines, 0, -1 })
     table.insert(lines, "└─────────────────────────────────────────────────────────┘")
     table.insert(highlights, { "ThemePickerComment", #lines, 0, -1 })
@@ -212,6 +222,12 @@ local function move_selection(direction)
     if new_index >= 1 and new_index <= #state.themes then
         state.selected_index = new_index
         render_content()
+        
+        -- Apply theme instantly for preview
+        local selected_theme = state.themes[state.selected_index]
+        if selected_theme and selected_theme ~= "" then
+            apply.apply_theme(selected_theme, { silent = true })
+        end
     end
 end
 
@@ -224,8 +240,10 @@ local function apply_selected_theme()
     if state.selected_index >= 1 and state.selected_index <= #state.themes then
         local selected_theme = state.themes[state.selected_index]
         if selected_theme and selected_theme ~= "" then
+            -- Update the original theme to the selected one
+            state.original_theme = selected_theme
             close_window()
-            vim.notify("🎨 Applying theme: " .. selected_theme, vim.log.levels.INFO)
+            vim.notify("🎨 Applied theme: " .. selected_theme, vim.log.levels.INFO)
             apply.apply_theme(selected_theme)
         else
             vim.notify("Invalid theme selected", vim.log.levels.ERROR)
@@ -247,36 +265,56 @@ local function setup_keymaps()
     vim.keymap.set("n", "k", function() move_selection(-1) end, opts)
     vim.keymap.set("n", "<Down>", function() move_selection(1) end, opts)
     vim.keymap.set("n", "<Up>", function() move_selection(-1) end, opts)
-    vim.keymap.set("n", "gg", function() state.selected_index = 1; render_content() end, opts)
-    vim.keymap.set("n", "G", function() state.selected_index = #state.themes; render_content() end, opts)
+    vim.keymap.set("n", "<C-n>", function() move_selection(1) end, opts)
+    vim.keymap.set("n", "<C-p>", function() move_selection(-1) end, opts)
+    vim.keymap.set("n", "gg", function() 
+        state.selected_index = 1
+        render_content()
+        local selected_theme = state.themes[state.selected_index]
+        if selected_theme and selected_theme ~= "" then
+            apply.apply_theme(selected_theme, { silent = true })
+        end
+    end, opts)
+    vim.keymap.set("n", "G", function() 
+        state.selected_index = #state.themes
+        render_content()
+        local selected_theme = state.themes[state.selected_index]
+        if selected_theme and selected_theme ~= "" then
+            apply.apply_theme(selected_theme, { silent = true })
+        end
+    end, opts)
     
     -- Selection
     vim.keymap.set("n", "<CR>", apply_selected_theme, opts)
     vim.keymap.set("n", "<Space>", apply_selected_theme, opts)
     vim.keymap.set("n", "l", apply_selected_theme, opts)
-    vim.keymap.set("n", "p", function()
-        if #state.themes == 0 then
-            vim.notify("No themes available", vim.log.levels.WARN)
-            return
-        end
-        
-        if state.selected_index >= 1 and state.selected_index <= #state.themes then
-            local selected_theme = state.themes[state.selected_index]
-            if selected_theme and selected_theme ~= "" then
-                apply.apply_theme(selected_theme, { silent = true })
-                vim.notify("🎨 Previewing: " .. selected_theme, vim.log.levels.INFO)
-            else
-                vim.notify("Invalid theme selected", vim.log.levels.ERROR)
-            end
-        else
-            vim.notify("Invalid selection index", vim.log.levels.ERROR)
-        end
-    end, opts)
+
     
     -- Close
-    vim.keymap.set("n", "<Esc>", close_window, opts)
-    vim.keymap.set("n", "q", close_window, opts)
-    vim.keymap.set("n", "h", close_window, opts)
+    vim.keymap.set("n", "<Esc>", function()
+        -- Revert to original theme if it exists
+        if state.original_theme and state.original_theme ~= "" then
+            apply.apply_theme(state.original_theme, { silent = true })
+            vim.notify("🎨 Reverted to original theme: " .. state.original_theme, vim.log.levels.INFO)
+        end
+        close_window()
+    end, opts)
+    vim.keymap.set("n", "q", function()
+        -- Revert to original theme if it exists
+        if state.original_theme and state.original_theme ~= "" then
+            apply.apply_theme(state.original_theme, { silent = true })
+            vim.notify("🎨 Reverted to original theme: " .. state.original_theme, vim.log.levels.INFO)
+        end
+        close_window()
+    end, opts)
+    vim.keymap.set("n", "h", function()
+        -- Revert to original theme if it exists
+        if state.original_theme and state.original_theme ~= "" then
+            apply.apply_theme(state.original_theme, { silent = true })
+            vim.notify("🎨 Reverted to original theme: " .. state.original_theme, vim.log.levels.INFO)
+        end
+        close_window()
+    end, opts)
     
     -- Search (optional)
     vim.keymap.set("n", "/", function()
@@ -297,9 +335,14 @@ function M.open_picker()
         return
     end
     
-    -- Reset state
-    state.selected_index = 1
+    -- Store original theme - we'll use the first theme as the "original" for this session
+    -- When user applies a theme with Enter, it becomes the new "original" theme
+    state.original_theme = apply.current_theme or 0
     
+    -- Reset state
+    state.selected_index = library.find_theme_index(apply.current_theme)
+    
+    print(#state.themes, state.selected_index)
     -- Ensure selected index is valid
     if #state.themes > 0 then
         state.selected_index = math.min(state.selected_index, #state.themes)
@@ -312,16 +355,34 @@ function M.open_picker()
     setup_keymaps()
     render_content()
     
+    -- Apply first theme for initial preview
+    if #state.themes > 0 then
+        local the_theme = state.themes[state.selected_index]
+        if the_theme and the_theme ~= "" then
+            apply.apply_theme(the_theme, { silent = true })
+        end
+    end
+    
     -- Set autocommands for cleanup
     vim.api.nvim_create_autocmd("BufLeave", {
         buffer = state.buffer_id,
-        callback = close_window,
+        callback = function()
+            -- Revert to original theme on buffer leave
+            if state.original_theme and state.original_theme ~= "" then
+                apply.apply_theme(state.original_theme, { silent = true })
+            end
+            close_window()
+        end,
         once = true
     })
     
     vim.api.nvim_create_autocmd("WinLeave", {
         callback = function()
             if state.window_id and vim.api.nvim_win_is_valid(state.window_id) then
+                -- Revert to original theme on window leave
+                if state.original_theme and state.original_theme ~= "" then
+                    apply.apply_theme(state.original_theme, { silent = true })
+                end
                 close_window()
             end
         end,

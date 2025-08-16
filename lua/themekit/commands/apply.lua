@@ -3,6 +3,8 @@ local loader = require("themekit.loader")
 
 local M = {}
 
+M.current_theme = nil
+
 function M.apply_theme(theme_name, opts)
     opts = opts or { silent = false }
     if not theme_name or theme_name == "" then
@@ -36,6 +38,7 @@ function M.apply_theme(theme_name, opts)
 
     -- Apply the theme using the loader
     loader.apply(theme)
+    M.current_theme = theme_name
 
     if not opts.silent then
         vim.notify("Applied theme: " .. theme_name, vim.log.levels.INFO)
