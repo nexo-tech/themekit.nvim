@@ -56,13 +56,24 @@ local function set_hl(group, attrs, palette)
             crossed_out = 'strikethrough',
             dim = 'undercurl',
         }
+        local style_parts = {}
         for _, mod in ipairs(attrs.modifiers) do
-            style = style .. (mod_map[mod] or '') .. ','
+            local mapped_mod = mod_map[mod]
+            if mapped_mod and mapped_mod ~= '' then
+                table.insert(style_parts, mapped_mod)
+            end
+        end
+        if #style_parts > 0 then
+            style = table.concat(style_parts, ',')
         end
     end
 
     if attrs.underline then
-        style = style .. 'underline,'
+        if style ~= '' then
+            style = style .. ',underline'
+        else
+            style = 'underline'
+        end
         if attrs.underline.color then
             vim.cmd(string.format(
                 'highlight %s guisp=%s gui=%s %s %s',
