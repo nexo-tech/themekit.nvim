@@ -14,6 +14,29 @@ local function resolve_color(color, palette)
         return palette[color]
     end
 
+    -- Fallback color mapping for common color names
+    local color_fallbacks = {
+        ['light-gray'] = '#d3d3d3',
+        ['light-grey'] = '#d3d3d3',
+        ['dark-gray'] = '#a9a9a9',
+        ['dark-grey'] = '#a9a9a9',
+        ['gray'] = '#808080',
+        ['grey'] = '#808080',
+        ['white'] = '#ffffff',
+        ['black'] = '#000000',
+        ['red'] = '#ff0000',
+        ['green'] = '#00ff00',
+        ['blue'] = '#0000ff',
+        ['yellow'] = '#ffff00',
+        ['cyan'] = '#00ffff',
+        ['magenta'] = '#ff00ff',
+    }
+
+    -- Check if it's a known color name
+    if color_fallbacks[color] then
+        return color_fallbacks[color]
+    end
+
     -- Return as-is if not found in palette (fallback)
     return color
 end

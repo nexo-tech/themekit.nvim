@@ -29,18 +29,21 @@ local state = {
     buffer_id = nil,
     is_open = false,
     preview_mode = false,
-    original_theme = nil
+    original_theme = nil,
+    scroll_offset = 0,
+    visible_lines = 0
 }
 
 -- Utility functions
 local function create_highlight_groups()
     -- Create highlight groups if they don't exist
+    -- Use Visual highlight for selected item - it has a clear background that shows selection
     local highlights = {
         ["ThemePickerBorder"] = { link = "FloatBorder" },
         ["ThemePickerTitle"] = { link = "FloatTitle" },
         ["ThemePickerPrompt"] = { link = "FloatTitle" },
         ["ThemePickerCursor"] = { link = "CursorLine" },
-        ["ThemePickerSelected"] = { link = "PmenuSel" },
+        ["ThemePickerSelected"] = { link = "Visual" },  -- Changed from PmenuSel to Visual for better visibility
         ["ThemePickerNormal"] = { link = "Normal" },
         ["ThemePickerComment"] = { link = "Comment" }
     }
@@ -60,19 +63,18 @@ local function get_window_position()
     local width = math.min(config.width, editor_width - 4)
     local height = math.min(config.height, editor_height - 4)
     
-    -- Adjust height based on number of themes
-    local min_height = 8  -- Minimum height for title, prompt, footer
-    local theme_height = #state.themes
-    local adjusted_height = math.max(min_height, math.min(height, theme_height + min_height))
+    -- Calculate available space for theme list (header + footer take about 8 lines)
+    local header_footer_lines = 8
+    state.visible_lines = math.max(5, height - header_footer_lines)
     
-    local row = math.floor((editor_height - adjusted_height) / 2) - 1
+    local row = math.floor((editor_height - height) / 2) - 1
     local col = math.floor((editor_width - width) / 2)
     
     return {
         row = row,
         col = col,
         width = width,
-        height = adjusted_height
+        height = height
     }
 end
 
@@ -113,12 +115,9 @@ local function create_window()
     vim.api.nvim_win_set_option(state.window_id, "wrap", false)
     vim.api.nvim_win_set_option(state.window_id, "cursorcolumn", false)
     
-    -- Hide cursor completely
-    vim.api.nvim_win_set_option(state.window_id, "cursorline", false)
-    vim.api.nvim_win_set_option(state.window_id, "cursorcolumn", false)
-    
-    -- Set cursor to invisible
-    vim.api.nvim_win_set_option(state.window_id, "guicursor", "a:blinkon0")
+    -- Completely hide the cursor - make it invisible
+    vim.cmd('highlight Cursor blend=100')
+    vim.api.nvim_win_set_option(state.window_id, "guicursor", "a:Cursor/lCursor")
     
     state.is_open = true
 end
@@ -134,7 +133,33 @@ local function close_window()
     state.buffer_id = nil
     state.is_open = false
     state.selected_index = 1
+    state.scroll_offset = 0
+    state.visible_lines = 0
     state.original_theme = nil
+end
+
+local function update_scroll_offset()
+    -- Ensure the selected item is visible within the window
+    local header_lines = 4  -- Title, separator, prompt, empty line
+    local selected_line = state.selected_index
+    
+    -- Calculate which line the selected theme should appear on in the visible area
+    local target_line = selected_line - state.scroll_offset
+    
+    -- If selected item is above visible area, scroll up
+    if target_line < 1 then
+        state.scroll_offset = selected_line - 1
+    -- If selected item is below visible area, scroll down
+    elseif target_line > state.visible_lines then
+        state.scroll_offset = selected_line - state.visible_lines
+    end
+    
+    -- Ensure scroll offset doesn't go below 0
+    state.scroll_offset = math.max(0, state.scroll_offset)
+    
+    -- Ensure we don't scroll past the end of the list
+    local max_scroll = math.max(0, #state.themes - state.visible_lines)
+    state.scroll_offset = math.min(state.scroll_offset, max_scroll)
 end
 
 local function render_content()
@@ -142,6 +167,8 @@ local function render_content()
         return
     end
 
+    update_scroll_offset()
+    
     local lines = {}
     local highlights = {}
     
@@ -153,19 +180,32 @@ local function render_content()
     table.insert(lines, string.rep("─", #config.title))
     table.insert(highlights, { "ThemePickerComment", 1, 0, -1 })
     
-    -- Add prompt
-    table.insert(lines, config.prompt .. "(" .. #state.themes .. " available)")
+    -- Add prompt with scroll indicator
+    local scroll_indicator = ""
+    if #state.themes > state.visible_lines then
+        local current_page = math.floor(state.scroll_offset / state.visible_lines) + 1
+        local total_pages = math.ceil(#state.themes / state.visible_lines)
+        scroll_indicator = string.format(" [%d/%d]", current_page, total_pages)
+    end
+    table.insert(lines, config.prompt .. "(" .. #state.themes .. " available)" .. scroll_indicator)
     table.insert(highlights, { "ThemePickerPrompt", 2, 0, -1 })
     
     -- Add separator
     table.insert(lines, "")
     table.insert(highlights, { "ThemePickerComment", 3, 0, -1 })
     
-    -- Add themes list
+    -- Add themes list (only visible portion)
     if #state.themes > 0 then
-        for i, theme in ipairs(state.themes) do
+        local start_idx = state.scroll_offset + 1
+        local end_idx = math.min(state.scroll_offset + state.visible_lines, #state.themes)
+        
+        for i = start_idx, end_idx do
+            local theme = state.themes[i]
             if theme and theme ~= "" then
-                local prefix = i == state.selected_index and "▶ " or "  "
+                local prefix = "  "
+                if i == state.selected_index then
+                    prefix = "> "
+                end
                 local line = prefix .. theme
                 table.insert(lines, line)
                 
@@ -176,6 +216,12 @@ local function render_content()
                 end
             end
         end
+        
+        -- Fill remaining visible lines if needed
+        while #lines < 4 + state.visible_lines do
+            table.insert(lines, "")
+            table.insert(highlights, { "ThemePickerNormal", #lines - 1, 0, -1 })
+        end
     else
         table.insert(lines, "  No themes available")
         table.insert(highlights, { "ThemePickerComment", #lines - 1, 0, -1 })
@@ -184,12 +230,10 @@ local function render_content()
     -- Add footer
     table.insert(lines, "")
     table.insert(highlights, { "ThemePickerComment", #lines - 1, 0, -1 })
-    table.insert(lines, "┌─ Navigation ──────────────────────────────────────────┐")
-    table.insert(highlights, { "ThemePickerComment", #lines, 0, -1 })
-    table.insert(lines, "│ <CR>/<Space>/l Apply │ <C-p>/<C-n> Navigate │ <Esc>/q/h Cancel │")
-    table.insert(highlights, { "ThemePickerComment", #lines, 0, -1 })
-    table.insert(lines, "└─────────────────────────────────────────────────────────┘")
-    table.insert(highlights, { "ThemePickerComment", #lines, 0, -1 })
+    table.insert(lines, "─────────────────────────────────────────────────────────")
+    table.insert(highlights, { "ThemePickerComment", #lines - 1, 0, -1 })
+    table.insert(lines, " j/k: Navigate  │  Enter: Apply  │  Esc/q: Cancel")
+    table.insert(highlights, { "ThemePickerComment", #lines - 1, 0, -1 })
     
     -- Set buffer content
     vim.api.nvim_buf_set_option(state.buffer_id, "modifiable", true)
@@ -202,14 +246,8 @@ local function render_content()
         vim.api.nvim_buf_add_highlight(state.buffer_id, -1, hl[1], hl[2], hl[3], hl[4])
     end
     
-    -- Set cursor position
-    if #state.themes > 0 and state.selected_index >= 1 and state.selected_index <= #state.themes then
-        local cursor_line = 4 + state.selected_index - 1
-        vim.api.nvim_win_set_cursor(state.window_id, { cursor_line, 0 })
-    else
-        -- Set cursor to a safe position
-        vim.api.nvim_win_set_cursor(state.window_id, { 4, 0 })
-    end
+    -- Move cursor out of the way (to top) since we're using highlighting for selection
+    vim.api.nvim_win_set_cursor(state.window_id, { 1, 0 })
 end
 
 local function move_selection(direction)

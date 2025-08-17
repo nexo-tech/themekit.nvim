@@ -1,4 +1,4 @@
-local toml = require("autoconf.toml")
+local toml = require("themekit.toml")
 
 local M = {}
 
