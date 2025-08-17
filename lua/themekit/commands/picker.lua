@@ -380,7 +380,6 @@ function M.open_picker()
     -- Reset state
     state.selected_index = library.find_theme_index(apply.current_theme)
     
-    print(#state.themes, state.selected_index)
     -- Ensure selected index is valid
     if #state.themes > 0 then
         state.selected_index = math.min(state.selected_index, #state.themes)

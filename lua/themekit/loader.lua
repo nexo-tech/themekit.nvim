@@ -75,7 +75,7 @@ local function set_hl(group, attrs, palette)
             style = 'underline'
         end
         if attrs.underline.color then
-            vim.cmd(string.format(
+            vim.cmd('silent! ' .. string.format(
                 'highlight %s guisp=%s gui=%s %s %s',
                 group, resolve_color(attrs.underline.color, palette), style, fg, bg
             ))
@@ -83,9 +83,14 @@ local function set_hl(group, attrs, palette)
         end
     end
 
-    if style ~= '' then style = 'gui=' .. style end
-    local command = string.format('highlight %s %s %s %s', group, style, fg, bg)
-    vim.cmd(command)
+    -- Build command parts, filtering out empty values
+    local parts = { 'highlight', group }
+    if style ~= '' then table.insert(parts, 'gui=' .. style) end
+    if fg ~= '' then table.insert(parts, fg) end
+    if bg ~= '' then table.insert(parts, bg) end
+    
+    local command = table.concat(parts, ' ')
+    vim.cmd('silent! ' .. command)
 end
 
 -- Buffer for cursor highlight groups to merge attributes
@@ -576,8 +581,8 @@ end
 -- Main function that applies the helix theme
 function M.apply(in_theme)
     -- Clear existing highlights
-    vim.cmd('highlight clear')
-    if vim.fn.exists('syntax_on') then vim.cmd('syntax reset') end
+    vim.cmd('silent! highlight clear')
+    if vim.fn.exists('syntax_on') then vim.cmd('silent! syntax reset') end
     vim.o.background = 'dark'
     vim.g.colors_name = 'helix_theme'
 
