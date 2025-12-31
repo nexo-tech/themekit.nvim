@@ -11,11 +11,11 @@ ThemeKit.nvim is a Neovim plugin that enables loading and applying Helix-style T
 ### Core Components
 
 1. **`lua/themekit/init.lua`** - Entry point that provides `init()` and `apply()` functions
-2. **`lua/themekit/loader.lua`** (644 lines) - Core theme application engine
-   - Maps Helix theme keys to Neovim highlight groups
-   - Handles palette color resolution
+2. **`lua/themekit/loader.lua`** - Core theme application engine
+   - Maps Helix theme keys to Neovim highlight groups via data-driven `handler_mappings` table
+   - Handles palette color resolution with caching
    - Manages cursor highlight buffering and application
-   - Contains ~90 theme key handlers for different syntax/UI elements
+   - Contains 166 theme key handlers for syntax/UI elements
 
 3. **`lua/themekit/toml.lua`** (1767 lines) - TOML parser implementation
    - Full TOML v1.0.0 spec compliance
@@ -126,3 +126,20 @@ gold = "#ffd700"
 - The plugin integrates with Lualine when available, automatically configuring it with theme colors
 - Theme validation (`check.lua`) compares theme keys against the supported handler list in `loader.lua`
 - **Theme inheritance**: Fully resolved themes have the `inherits` key removed and are cached to avoid re-resolution
+- **Handler mappings**: Theme handlers are generated from a data-driven `handler_mappings` table for maintainability
+
+## Gotchas
+
+### Do NOT use `nvim_set_hl()` for `set_hl()`
+
+The `set_hl()` function must use `vim.cmd('highlight ...')` instead of `vim.api.nvim_set_hl()`.
+
+**Why**: `nvim_set_hl()` **completely replaces** highlight definitions, clearing any attributes not explicitly specified. This means:
+- `nvim_set_hl(0, "Normal", {fg = "#ffffff"})` clears the background color
+- `nvim_set_hl(0, "Comment", {italic = true})` clears fg/bg colors
+
+In contrast, `vim.cmd('highlight Comment gui=italic')` only sets the specified attributes, preserving existing colors.
+
+**Impact**: Using `nvim_set_hl()` causes themes to display incorrectly with washed-out or missing colors, since highlight groups end up with incomplete definitions.
+
+**Cursor highlights are different**: `set_cursor_hl()` uses `nvim_set_hl()` correctly because cursor highlights are buffered, merged, and applied all at once with complete attribute sets.

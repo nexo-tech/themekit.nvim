@@ -466,7 +466,7 @@ TOML.multistep_parser = function(options)
                         local uniNum = tonumber(uni, 16)
                         if not uniNum then
                             err("Unicode escape is not a Unicode scalar")
-                        elseif (uniNum >= 0 and uniNum <= 0xd7ff) and not (uniNum >= 0xe000 and uniNum <= 0x10ffff) then
+                        elseif (uniNum >= 0 and uniNum <= 0xd7ff) or (uniNum >= 0xe000 and uniNum <= 0xffff) then
                             str = str .. utf(uniNum)
                         else
                             err("Unicode escape is not a Unicode scalar")
@@ -477,7 +477,7 @@ TOML.multistep_parser = function(options)
                         local uni = char(1) .. char(2) .. char(3) .. char(4) .. char(5) .. char(6) .. char(7) .. char(8)
                         step(9)
                         local uniNum = tonumber(uni, 16)
-                        if (uniNum >= 0 and uniNum <= 0xd7ff) and not (uniNum >= 0xe000 and uniNum <= 0x10ffff) then
+                        if (uniNum >= 0 and uniNum <= 0xd7ff) or (uniNum >= 0xe000 and uniNum <= 0x10ffff) then
                             str = str .. utf(uniNum)
                         else
                             err("Unicode escape is not a Unicode scalar")
@@ -812,6 +812,36 @@ TOML.multistep_parser = function(options)
         local quoted = false
         local tbl = {}
 
+        -- Helper function to set a value in a nested table using dotted key notation
+        local function setDottedKey(tbl, key, value, isQuoted)
+            -- If the key is quoted, treat it as a literal key (no splitting)
+            if isQuoted then
+                tbl[key] = value
+                return
+            end
+
+            -- Split unquoted key on dots to create nested structure
+            local keys = {}
+            for part in key:gmatch("[^.]+") do
+                keys[#keys + 1] = part
+            end
+
+            -- Navigate/create nested tables
+            local current = tbl
+            for i = 1, #keys - 1 do
+                local k = keys[i]
+                if current[k] == nil then
+                    current[k] = {}
+                elseif type(current[k]) ~= "table" then
+                    err("Cannot create nested key, parent is not a table")
+                end
+                current = current[k]
+            end
+
+            -- Set the final value
+            current[keys[#keys]] = value
+        end
+
         while bounds() do
             if char() == "}" then
                 break
@@ -832,7 +862,7 @@ TOML.multistep_parser = function(options)
                 end
 
                 local v = getValue().value
-                tbl[buffer] = v
+                setDottedKey(tbl, buffer, v, quoted)
 
                 skipWhitespace()
 
