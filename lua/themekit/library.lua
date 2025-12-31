@@ -6,9 +6,9 @@ M.loaded_themes = {}
 M.available_theme_files = {}
 
 function M.load_all_themes()
-    -- Skip if already loaded
+    -- Skip if already scanned
     if vim.tbl_count(M.available_theme_files) > 0 then
-        return M.loaded_themes
+        return
     end
 
     -- Get the Neovim config directory
@@ -17,29 +17,22 @@ function M.load_all_themes()
 
     -- Check if themes directory exists
     if vim.fn.isdirectory(themes_dir) == 0 then
-        return M.loaded_themes
+        return
     end
 
     -- Find all .toml files in the themes directory
     local toml_files = vim.fn.glob(themes_dir .. '/*.toml', false, true)
 
     if #toml_files == 0 then
-        return M.loaded_themes
+        return
     end
 
     -- Store the file paths for lazy loading
     for _, file_path in ipairs(toml_files) do
-        -- Get just the filename without extension
         local filename = vim.fn.fnamemodify(file_path, ':t:r')
-        
-        -- Use relative path from themes directory for the loader
         local relative_path = 'themes/' .. filename .. '.toml'
-        
-        -- Store the relative path for later loading
         M.available_theme_files[filename] = relative_path
     end
-
-    return M.loaded_themes
 end
 
 -- Helper function to deep merge tables (b overrides a)
@@ -170,6 +163,13 @@ function M.find_theme_index(theme_name)
             return i
         end
     end
+end
+
+function M.theme_exists(theme_name)
+    if vim.tbl_count(M.available_theme_files) == 0 then
+        M.load_all_themes()
+    end
+    return M.available_theme_files[theme_name] ~= nil
 end
 
 return M

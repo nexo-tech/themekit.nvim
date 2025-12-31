@@ -16,21 +16,12 @@ function M.apply_theme(theme_name, opts)
     local theme = library.get_theme(theme_name)
 
     if not theme then
-        -- Check if theme exists in available themes
-        local available_themes = library.list_available_themes()
-        local theme_exists = false
-        for _, name in ipairs(available_themes) do
-            if name == theme_name then
-                theme_exists = true
-                break
-            end
-        end
-
-        if theme_exists then
+        if library.theme_exists(theme_name) then
             vim.notify("Failed to load theme '" .. theme_name .. "' - check theme file syntax", vim.log.levels.ERROR)
         else
+            local available = library.list_available_themes()
             vim.notify(
-                "Theme '" .. theme_name .. "' not found. Available themes: " .. table.concat(available_themes, ", "),
+                "Theme '" .. theme_name .. "' not found. Available: " .. table.concat(available, ", "),
                 vim.log.levels.ERROR)
         end
         return

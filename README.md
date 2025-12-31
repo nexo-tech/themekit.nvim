@@ -19,7 +19,7 @@ A powerful Neovim plugin for loading and applying Helix-style themes with compre
 ### Using Packer
 ```lua
 use {
-    'your-username/themekit.nvim',
+    'nexo-tech/themekit.nvim',
     config = function()
         require('themekit').init()
     end
@@ -29,7 +29,7 @@ use {
 ### Using Lazy.nvim
 ```lua
 {
-    'your-username/themekit.nvim',
+    'nexo-tech/themekit.nvim',
     config = function()
         require('themekit').init()
     end
@@ -38,7 +38,7 @@ use {
 
 ### Using vim-plug
 ```vim
-Plug 'your-username/themekit.nvim'
+Plug 'nexo-tech/themekit.nvim'
 ```
 
 ## 📁 Setup
@@ -324,8 +324,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/your-username/themekit.nvim/issues)
-- 💡 **Feature Requests**: [GitHub Discussions](https://github.com/your-username/themekit.nvim/discussions)
+- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/nexo-tech/themekit.nvim/issues)
+- 💡 **Feature Requests**: [GitHub Discussions](https://github.com/nexo-tech/themekit.nvim/discussions)
 - 📖 **Documentation**: This README and inline code comments
 
 ---

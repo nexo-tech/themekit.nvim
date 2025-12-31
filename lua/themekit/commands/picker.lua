@@ -7,9 +7,18 @@ local M = {}
 local config = {
     width = 60,
     height = 15,
+    header_lines = 4,           -- Title, separator, prompt, empty line
+    footer_lines = 3,           -- Empty line, separator, help text
     border = "rounded",
     title = " 🎨 Theme Picker ",
     prompt = "Select a theme: ",
+    cursor_indicator = "▊",
+    -- Fuzzy match scoring weights
+    scoring = {
+        base_match = 10,
+        consecutive_bonus = 5,
+        word_boundary_bonus = 15,
+    },
     highlight_groups = {
         border = "FloatBorder",
         title = "FloatTitle",
@@ -41,6 +50,31 @@ local state = {
     match_highlights = {},         -- positions of matched characters for highlighting
 }
 
+-- Helper: Preview a theme silently
+local function preview_theme(theme_name)
+    if theme_name and theme_name ~= "" then
+        apply.apply_theme(theme_name, { silent = true })
+    end
+end
+
+-- Helper: Revert to original theme
+local function revert_to_original()
+    if state.original_theme and state.original_theme ~= "" then
+        apply.apply_theme(state.original_theme, { silent = true })
+    end
+end
+
+-- Helper: Get footer help text based on current mode
+local function get_footer_text()
+    if state.search_mode then
+        return " j/k: Navigate  │  Enter: Exit search  │  Esc: Clear"
+    elseif state.filtered_themes then
+        return " j/k: Navigate  │  Enter: Apply  │  Esc: Show all  │  f/: Search"
+    else
+        return " j/k: Navigate  │  Enter: Apply  │  Esc/q: Cancel  │  f/: Search"
+    end
+end
+
 -- Fuzzy matching functions
 local function fuzzy_match(str, query)
     if query == "" then return 1000, {} end
@@ -52,6 +86,7 @@ local function fuzzy_match(str, query)
     local match_positions = {}
     local score = 0
     local consecutive = 0
+    local scoring = config.scoring
 
     for i = 1, #query do
         local char = query:sub(i, i)
@@ -64,7 +99,7 @@ local function fuzzy_match(str, query)
         -- Score based on position
         if found == str_idx then
             consecutive = consecutive + 1
-            score = score + 10 + consecutive * 5
+            score = score + scoring.base_match + consecutive * scoring.consecutive_bonus
         else
             consecutive = 0
             score = score + 1
@@ -72,7 +107,7 @@ local function fuzzy_match(str, query)
 
         -- Bonus for word boundary
         if found == 1 or str:sub(found-1, found-1):match('[^%w]') then
-            score = score + 15
+            score = score + scoring.word_boundary_bonus
         end
 
         table.insert(match_positions, found)
@@ -205,14 +240,15 @@ local function get_window_position()
     local editor_height = vim.o.lines
     local width = math.min(config.width, editor_width - 4)
     local height = math.min(config.height, editor_height - 4)
-    
-    -- Calculate available space for theme list (header + footer take about 8 lines)
-    local header_footer_lines = 8
-    state.visible_lines = math.max(5, height - header_footer_lines)
-    
+
+    -- Calculate available space for theme list
+    local chrome_lines = config.header_lines + config.footer_lines
+    state.visible_lines = math.max(5, height - chrome_lines)
+
+    -- Center window (offset by 1 to account for border)
     local row = math.floor((editor_height - height) / 2) - 1
     local col = math.floor((editor_width - width) / 2)
-    
+
     return {
         row = row,
         col = col,
@@ -294,9 +330,8 @@ end
 
 local function update_scroll_offset()
     -- Ensure the selected item is visible within the window
-    local header_lines = 4  -- Title, separator, prompt, empty line
     local selected_line = state.selected_index
-    
+
     -- Calculate which line the selected theme should appear on in the visible area
     local target_line = selected_line - state.scroll_offset
     
@@ -340,9 +375,8 @@ render_content = function()
 
     -- Add prompt - different for search mode
     if state.search_mode then
-        local cursor_indicator = "▊"
         local prompt_text = string.format("Search: %s%s (%d matches)",
-            state.search_query, cursor_indicator, total_themes)
+            state.search_query, config.cursor_indicator, total_themes)
         table.insert(lines, prompt_text)
     else
         local scroll_indicator = ""
@@ -411,19 +445,9 @@ render_content = function()
     -- Add footer
     table.insert(lines, "")
     table.insert(highlights, { "ThemePickerComment", #lines - 1, 0, -1 })
-    table.insert(lines, "─────────────────────────────────────────────────────────")
+    table.insert(lines, string.rep("─", config.width - 4))
     table.insert(highlights, { "ThemePickerComment", #lines - 1, 0, -1 })
-
-    -- Dynamic footer text based on mode
-    local footer_text
-    if state.search_mode then
-        footer_text = " j/k: Navigate  │  Enter: Exit search  │  Esc: Clear"
-    elseif state.filtered_themes then
-        footer_text = " j/k: Navigate  │  Enter: Apply  │  Esc: Show all  │  f/: Search"
-    else
-        footer_text = " j/k: Navigate  │  Enter: Apply  │  Esc/q: Cancel  │  f/: Search"
-    end
-    table.insert(lines, footer_text)
+    table.insert(lines, get_footer_text())
     table.insert(highlights, { "ThemePickerComment", #lines - 1, 0, -1 })
 
     -- Set buffer content
@@ -451,15 +475,9 @@ local function move_selection(direction)
 
     if new_index >= 1 and new_index <= #display_themes then
         state.selected_index = new_index
-        -- Track theme name for selection persistence
         state.selected_theme_name = display_themes[new_index]
         render_content()
-
-        -- Apply theme instantly for preview
-        local selected_theme = display_themes[state.selected_index]
-        if selected_theme and selected_theme ~= "" then
-            apply.apply_theme(selected_theme, { silent = true })
-        end
+        preview_theme(display_themes[state.selected_index])
     end
 end
 
@@ -495,8 +513,8 @@ local function setup_keymaps()
 
     -- Helper for close and revert
     local function close_and_revert()
+        revert_to_original()
         if state.original_theme and state.original_theme ~= "" then
-            apply.apply_theme(state.original_theme, { silent = true })
             vim.notify("🎨 Reverted to original theme: " .. state.original_theme, vim.log.levels.INFO)
         end
         close_window()
@@ -508,9 +526,7 @@ local function setup_keymaps()
         state.selected_index = 1
         state.selected_theme_name = display_themes[1]
         render_content()
-        if display_themes[1] and display_themes[1] ~= "" then
-            apply.apply_theme(display_themes[1], { silent = true })
-        end
+        preview_theme(display_themes[1])
     end
 
     local function jump_to_last()
@@ -518,9 +534,7 @@ local function setup_keymaps()
         state.selected_index = #display_themes
         state.selected_theme_name = display_themes[#display_themes]
         render_content()
-        if display_themes[#display_themes] and display_themes[#display_themes] ~= "" then
-            apply.apply_theme(display_themes[#display_themes], { silent = true })
-        end
+        preview_theme(display_themes[#display_themes])
     end
 
     -- Navigation (j/k only work when NOT in search mode, arrows always work)
@@ -682,34 +696,25 @@ function M.open_picker()
     setup_keymaps()
     render_content()
     
-    -- Apply first theme for initial preview
+    -- Apply selected theme for initial preview
     if #state.themes > 0 then
-        local the_theme = state.themes[state.selected_index]
-        if the_theme and the_theme ~= "" then
-            apply.apply_theme(the_theme, { silent = true })
-        end
+        preview_theme(state.themes[state.selected_index])
     end
     
     -- Set autocommands for cleanup
     vim.api.nvim_create_autocmd("BufLeave", {
         buffer = state.buffer_id,
         callback = function()
-            -- Revert to original theme on buffer leave
-            if state.original_theme and state.original_theme ~= "" then
-                apply.apply_theme(state.original_theme, { silent = true })
-            end
+            revert_to_original()
             close_window()
         end,
         once = true
     })
-    
+
     vim.api.nvim_create_autocmd("WinLeave", {
         callback = function()
             if state.window_id and vim.api.nvim_win_is_valid(state.window_id) then
-                -- Revert to original theme on window leave
-                if state.original_theme and state.original_theme ~= "" then
-                    apply.apply_theme(state.original_theme, { silent = true })
-                end
+                revert_to_original()
                 close_window()
             end
         end,

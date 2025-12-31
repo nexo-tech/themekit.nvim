@@ -143,3 +143,9 @@ In contrast, `vim.cmd('highlight Comment gui=italic')` only sets the specified a
 **Impact**: Using `nvim_set_hl()` causes themes to display incorrectly with washed-out or missing colors, since highlight groups end up with incomplete definitions.
 
 **Cursor highlights are different**: `set_cursor_hl()` uses `nvim_set_hl()` correctly because cursor highlights are buffered, merged, and applied all at once with complete attribute sets.
+
+## Protected Files
+
+### Do NOT edit `toml.lua`
+
+The file `lua/themekit/toml.lua` is a complete, standalone TOML parser implementation. Do not modify this file under any circumstances. It is stable, well-tested, and changes could break TOML parsing across all themes.

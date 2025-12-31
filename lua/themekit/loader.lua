@@ -1,7 +1,25 @@
 local M = {}
 
+-- Constants
+local HEX_SHORT_MULTIPLIER = 17  -- Expands 4-bit to 8-bit color (0xF -> 0xFF)
+local DIM_BLEND_RATIO = 0.6
+local DEFAULT_BG = '#000000'
+
 -- Color resolution cache (cleared on each apply)
 local color_cache = {}
+
+-- Format RGB values (0-255) as hex color string
+local function format_hex(r, g, b)
+    return string.format('#%02x%02x%02x', r, g, b)
+end
+
+-- Blend RGB components with ratio: result = c1 * ratio + c2 * (1 - ratio)
+local function blend_rgb(r1, g1, b1, r2, g2, b2, ratio)
+    return
+        math.floor(r1 * ratio + r2 * (1 - ratio) + 0.5),
+        math.floor(g1 * ratio + g2 * (1 - ratio) + 0.5),
+        math.floor(b1 * ratio + b2 * (1 - ratio) + 0.5)
+end
 
 -- Parse hex color components into r, g, b, a values (0-255)
 local function parse_hex_color(hex)
@@ -19,15 +37,15 @@ local function parse_hex_color(hex)
         b = tonumber(hex:sub(6, 7), 16)
         a = tonumber(hex:sub(8, 9), 16)
     elseif len == 3 then
-        r = tonumber(hex:sub(2, 2), 16) * 17
-        g = tonumber(hex:sub(3, 3), 16) * 17
-        b = tonumber(hex:sub(4, 4), 16) * 17
+        r = tonumber(hex:sub(2, 2), 16) * HEX_SHORT_MULTIPLIER
+        g = tonumber(hex:sub(3, 3), 16) * HEX_SHORT_MULTIPLIER
+        b = tonumber(hex:sub(4, 4), 16) * HEX_SHORT_MULTIPLIER
         a = 255
     elseif len == 4 then
-        r = tonumber(hex:sub(2, 2), 16) * 17
-        g = tonumber(hex:sub(3, 3), 16) * 17
-        b = tonumber(hex:sub(4, 4), 16) * 17
-        a = tonumber(hex:sub(5, 5), 16) * 17
+        r = tonumber(hex:sub(2, 2), 16) * HEX_SHORT_MULTIPLIER
+        g = tonumber(hex:sub(3, 3), 16) * HEX_SHORT_MULTIPLIER
+        b = tonumber(hex:sub(4, 4), 16) * HEX_SHORT_MULTIPLIER
+        a = tonumber(hex:sub(5, 5), 16) * HEX_SHORT_MULTIPLIER
     else
         return nil
     end
@@ -36,35 +54,29 @@ end
 
 -- Blend two colors: result = fg * ratio + bg * (1 - ratio)
 local function blend_colors(fg_hex, bg_hex, ratio)
-    local fr, fg_g, fb = parse_hex_color(fg_hex)
-    local br, bg_g, bb = parse_hex_color(bg_hex)
-    if not fr or not br then return fg_hex end
+    local r1, g1, b1 = parse_hex_color(fg_hex)
+    local r2, g2, b2 = parse_hex_color(bg_hex)
+    if not r1 or not r2 then return fg_hex end
 
-    local r = math.floor(fr * ratio + br * (1 - ratio) + 0.5)
-    local g = math.floor(fg_g * ratio + bg_g * (1 - ratio) + 0.5)
-    local b = math.floor(fb * ratio + bb * (1 - ratio) + 0.5)
-
-    return string.format('#%02x%02x%02x', r, g, b)
+    local r, g, b = blend_rgb(r1, g1, b1, r2, g2, b2, ratio)
+    return format_hex(r, g, b)
 end
 
 -- Blend RGBA color onto background, return solid hex color
 local function blend_alpha(fg_hex, bg_hex)
-    local fr, fg_g, fb, fa = parse_hex_color(fg_hex)
-    if not fr then return fg_hex end
-    if fa == 255 then
-        return string.format('#%02x%02x%02x', fr, fg_g, fb)
+    local r1, g1, b1, a = parse_hex_color(fg_hex)
+    if not r1 then return fg_hex end
+    if a == 255 then
+        return format_hex(r1, g1, b1)
     end
 
-    bg_hex = bg_hex or '#000000'
-    local br, bg_g, bb = parse_hex_color(bg_hex)
-    if not br then br, bg_g, bb = 0, 0, 0 end
+    bg_hex = bg_hex or DEFAULT_BG
+    local r2, g2, b2 = parse_hex_color(bg_hex)
+    if not r2 then r2, g2, b2 = 0, 0, 0 end
 
-    local alpha = fa / 255
-    local r = math.floor(fr * alpha + br * (1 - alpha) + 0.5)
-    local g = math.floor(fg_g * alpha + bg_g * (1 - alpha) + 0.5)
-    local b = math.floor(fb * alpha + bb * (1 - alpha) + 0.5)
-
-    return string.format('#%02x%02x%02x', r, g, b)
+    local alpha = a / 255
+    local r, g, b = blend_rgb(r1, g1, b1, r2, g2, b2, alpha)
+    return format_hex(r, g, b)
 end
 
 -- Fallback color mapping for common color names (Helix named colors)
@@ -119,7 +131,7 @@ local function resolve_color(color, palette, bg_color, visited)
                     bg = palette[bg]
                 end
             end
-            result = blend_alpha(color, bg or '#000000')
+            result = blend_alpha(color, bg or DEFAULT_BG)
         else
             result = color
         end
@@ -163,45 +175,41 @@ local modifier_map = {
     dim = 'dim',
 }
 
+-- Process modifiers in a single pass, returns (style_string, has_dim)
+local function process_modifiers(modifiers)
+    if not modifiers then return nil, false end
+    local style_parts = {}
+    local has_dim = false
+    for _, mod in ipairs(modifiers) do
+        if mod == 'dim' then
+            has_dim = true
+        else
+            local mapped = modifier_map[mod]
+            if mapped then table.insert(style_parts, mapped) end
+        end
+    end
+    local style = #style_parts > 0 and table.concat(style_parts, ',') or nil
+    return style, has_dim
+end
+
 -- Set highlight using vim.cmd (more compatible)
 local function set_hl(group, attrs, palette)
     -- Resolve colors
     local resolved_bg = attrs.bg and resolve_color(attrs.bg, palette) or nil
     local resolved_fg = attrs.fg and resolve_color(attrs.fg, palette, resolved_bg) or nil
 
-    -- Handle dim modifier by darkening foreground
-    local has_dim = false
-    if attrs.modifiers then
-        for _, mod in ipairs(attrs.modifiers) do
-            if mod == 'dim' then
-                has_dim = true
-                break
-            end
-        end
-    end
+    -- Process modifiers once
+    local style, has_dim = process_modifiers(attrs.modifiers)
 
+    -- Handle dim modifier by darkening foreground
     if has_dim and resolved_fg then
-        local bg = resolved_bg or (palette and palette._resolved_bg) or '#000000'
-        resolved_fg = blend_colors(resolved_fg, bg, 0.6)
+        local bg = resolved_bg or (palette and palette._resolved_bg) or DEFAULT_BG
+        resolved_fg = blend_colors(resolved_fg, bg, DIM_BLEND_RATIO)
     end
 
     local bg = resolved_bg and 'guibg=' .. resolved_bg or ''
     local fg = resolved_fg and 'guifg=' .. resolved_fg or ''
-    local style = ''
-
-    -- Handle modifiers
-    if attrs.modifiers then
-        local style_parts = {}
-        for _, mod in ipairs(attrs.modifiers) do
-            local mapped = modifier_map[mod]
-            if mapped and mapped ~= 'dim' then
-                table.insert(style_parts, mapped)
-            end
-        end
-        if #style_parts > 0 then
-            style = table.concat(style_parts, ',')
-        end
-    end
+    style = style or ''
 
     -- Handle underline with style
     if attrs.underline then
@@ -306,7 +314,11 @@ local function apply_cursor_highlights()
     end
 
     rebuild_cursor()
-    cursor_highlight_buffer = {}
+
+    -- Clear buffer in-place (preserves table reference)
+    for k in pairs(cursor_highlight_buffer) do
+        cursor_highlight_buffer[k] = nil
+    end
 end
 
 -- Data-driven handler mappings: theme_key -> {highlight_groups}
