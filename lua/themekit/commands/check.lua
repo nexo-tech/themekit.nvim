@@ -1,27 +1,12 @@
 local themes = require("themekit.library")
 local loader = require("themekit.loader")
+local utils = require("themekit.commands.utils")
 
 local M = {}
 
-function M.check_theme(theme_name)
-    -- Load themes if not already loaded
-    themes.load_all_themes()
-
-    -- Get the specific theme
-    local theme_data = themes.get_theme(theme_name)
-    if not theme_data then
-        print(string.format("❌ Theme '%s' not found!", theme_name))
-        print("Available themes:")
-        local available = themes.list_available_themes()
-        for _, name in ipairs(available) do
-            print("  • " .. name)
-        end
-        return false
-    end
-
-    print(string.format("🎨 Theme Check Report: %s", theme_name))
-    print(string.rep("=", 50))
-
+-- Validate theme and analyze key resolution
+-- Returns: { resolved_keys, unresolved_keys, total_keys, coverage_percent }
+local function validate_theme_keys(theme_data)
     -- Get supported theme keys from resolver
     local supported_keys = loader.get_supported_theme_keys()
     local supported_set = {}
@@ -49,21 +34,36 @@ function M.check_theme(theme_name)
     table.sort(resolved_keys)
     table.sort(unresolved_keys)
 
-    -- Print summary
     local resolved_count = #resolved_keys
     local unresolved_count = #unresolved_keys
-    local coverage_percent = math.floor((resolved_count / total_keys) * 100)
+    local coverage_percent = total_keys > 0 and math.floor((resolved_count / total_keys) * 100) or 0
 
+    return {
+        resolved_keys = resolved_keys,
+        unresolved_keys = unresolved_keys,
+        total_keys = total_keys,
+        coverage_percent = coverage_percent,
+    }
+end
+
+-- Present validation results to user
+local function present_check_results(theme_name, theme_data, validation)
+    print(string.format("🎨 Theme Check Report: %s", theme_name))
+    print(string.rep("=", 50))
+
+    -- Print summary
+    local resolved_count = #validation.resolved_keys
+    local unresolved_count = #validation.unresolved_keys
     print(string.format("📊 Summary:"))
-    print(string.format("  Total theme keys: %d", total_keys))
-    print(string.format("  ✅ Resolved: %d (%d%%)", resolved_count, coverage_percent))
-    print(string.format("  ❌ Unresolved: %d (%d%%)", unresolved_count, 100 - coverage_percent))
+    print(string.format("  Total theme keys: %d", validation.total_keys))
+    print(string.format("  ✅ Resolved: %d (%d%%)", resolved_count, validation.coverage_percent))
+    print(string.format("  ❌ Unresolved: %d (%d%%)", unresolved_count, 100 - validation.coverage_percent))
     print()
 
     -- Print resolved keys
-    if #resolved_keys > 0 then
+    if #validation.resolved_keys > 0 then
         print("✅ Resolved Keys:")
-        local categories = M.categorize_keys(resolved_keys)
+        local categories = M.categorize_keys(validation.resolved_keys)
         for category, keys in pairs(categories) do
             print(string.format("  📁 %s (%d):", category, #keys))
             for _, key in ipairs(keys) do
@@ -76,9 +76,9 @@ function M.check_theme(theme_name)
     end
 
     -- Print unresolved keys
-    if #unresolved_keys > 0 then
+    if #validation.unresolved_keys > 0 then
         print("❌ Unresolved Keys:")
-        local categories = M.categorize_keys(unresolved_keys)
+        local categories = M.categorize_keys(validation.unresolved_keys)
         for category, keys in pairs(categories) do
             print(string.format("  📁 %s (%d):", category, #keys))
             for _, key in ipairs(keys) do
@@ -106,12 +106,36 @@ function M.check_theme(theme_name)
     end
 
     -- Recommendations
-    if #unresolved_keys > 0 then
+    if #validation.unresolved_keys > 0 then
         print("💡 Recommendations:")
         print("  • Consider adding handlers for unresolved keys in theme resolver")
         print("  • Check if some keys might be variants of existing handlers")
         print("  • Some keys might be editor-specific and not applicable to Neovim")
     end
+end
+
+function M.check_theme(theme_name)
+    -- Load themes if not already loaded
+    themes.load_all_themes()
+
+    -- Get the specific theme
+    local theme_data, err = themes.get_theme(theme_name)
+    if not theme_data then
+        local error_msg = string.format("❌ Theme load failed: %s", err or ("Theme '" .. theme_name .. "' not found!"))
+        utils.notify_error(error_msg)
+        if not err or err:match("not found") then
+            local available = themes.list_available_themes()
+            local themes_list = table.concat(vim.tbl_map(function(name) return "  • " .. name end, available), "\n")
+            utils.notify_warn("Available themes:\n" .. themes_list)
+        end
+        return false
+    end
+
+    -- Validate theme keys
+    local validation = validate_theme_keys(theme_data)
+
+    -- Present results
+    present_check_results(theme_name, theme_data, validation)
 
     return true
 end
@@ -176,12 +200,9 @@ function M.setup_command()
     vim.api.nvim_create_user_command('ThemeCheck', function(opts)
         local theme_name = opts.args
         if theme_name == "" then
-            print("Usage: :ThemeCheck <theme_name>")
-            print("Available themes:")
             local available = themes.list_available_themes()
-            for _, name in ipairs(available) do
-                print("  • " .. name)
-            end
+            local themes_list = table.concat(vim.tbl_map(function(name) return "  • " .. name end, available), "\n")
+            utils.notify_warn("Usage: :ThemeCheck <theme_name>\nAvailable themes:\n" .. themes_list)
             return
         end
 
