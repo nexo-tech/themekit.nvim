@@ -297,18 +297,22 @@ ThemeKit maps Helix line number scopes to Neovim highlight groups:
 - `ui.linenr` → `LineNr` (inactive line numbers)
 - `ui.linenr.selected` → `CursorLineNr` (active line number)
 
-**To enable Helix-style line number highlighting** (bright active line number), add to your Neovim config:
+**Automatic Configuration**: ThemeKit automatically enables cursorline when you apply themes that define `ui.linenr.selected`, so you get Helix-style line number highlighting out of the box! No manual configuration needed.
+
+**Manual Override (Optional)**: If you want to customize cursorline behavior, add to your Neovim config:
 
 ```lua
--- Enable cursorline to highlight current line number
+-- Disable auto-enablement (if you don't want cursorline at all)
+vim.opt.cursorline = false
+
+-- Or customize how cursorline highlights:
 vim.opt.cursorline = true
-
--- Highlight ONLY the line number, not the entire line (Helix default)
-vim.opt.cursorlineopt = 'number'
-
--- Or highlight both line number and line:
--- vim.opt.cursorlineopt = 'both'
+vim.opt.cursorlineopt = 'both'  -- Highlight both line number AND current line
+-- vim.opt.cursorlineopt = 'number'  -- Only line number (default)
+-- vim.opt.cursorlineopt = 'line'    -- Only the line, not the number
 ```
+
+**Diagnostic Tool**: Use `:ThemeCheckLineNumbers` to verify your line number configuration and diagnose any issues.
 
 **Theme file example:**
 ```toml
@@ -322,7 +326,13 @@ white = "#ffffff"
 
 **Smart Fallback**: If a theme defines `ui.linenr` but NOT `ui.linenr.selected`, ThemeKit auto-generates a brighter version (30% blend with white + bold). This ensures Helix-style line number highlighting works even with incomplete themes.
 
-**ThemeKit does NOT force cursorline settings** - the theme only defines colors, you control whether cursorline is enabled in your Neovim config.
+**Auto-Enable Cursorline**: ThemeKit automatically enables `cursorline` when applying themes that define `ui.linenr.selected`. This provides Helix-style line number highlighting out of the box without manual configuration. The auto-enablement:
+- Only activates when a theme defines `ui.linenr.selected`
+- Respects existing `cursorline` settings (won't override if already enabled)
+- Sets `cursorlineopt = 'number'` by default (Helix-style: line number only)
+- Preserves any user-customized `cursorlineopt` settings
+
+**User Override**: You can still control cursorline behavior by explicitly setting it in your config before applying themes. ThemeKit will respect your preference.
 
 ## Gotchas
 

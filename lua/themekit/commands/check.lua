@@ -196,6 +196,41 @@ function M.format_complex_value(value)
     return tostring(value)
 end
 
+-- Check line number highlight configuration and cursorline settings
+function M.check_line_numbers()
+    -- Check if cursorline is enabled
+    local cursorline = vim.opt.cursorline:get()
+    local cursorlineopt = vim.opt.cursorlineopt:get()
+
+    print("🔍 Line Number Configuration Check")
+    print(string.rep("=", 50))
+    print(string.format("cursorline: %s", cursorline and "✅ enabled" or "❌ disabled"))
+    print(string.format("cursorlineopt: %s", #cursorlineopt > 0 and table.concat(cursorlineopt, ", ") or "default"))
+    print()
+
+    -- Check LineNr highlight
+    local linenr = vim.api.nvim_get_hl(0, {name = "LineNr"})
+    print("LineNr (inactive line numbers):")
+    print(string.format("  fg: %s", linenr.fg and string.format("#%06x", linenr.fg) or "not set"))
+    print()
+
+    -- Check CursorLineNr highlight
+    local cursorlinenr = vim.api.nvim_get_hl(0, {name = "CursorLineNr"})
+    print("CursorLineNr (current line number):")
+    print(string.format("  fg: %s", cursorlinenr.fg and string.format("#%06x", cursorlinenr.fg) or "not set"))
+    print(string.format("  bold: %s", cursorlinenr.bold and "yes" or "no"))
+    print()
+
+    if not cursorline then
+        print("💡 Recommendation:")
+        print("  Enable cursorline to see highlighted line numbers:")
+        print("  vim.opt.cursorline = true")
+        print("  vim.opt.cursorlineopt = 'number'  -- Helix-style (line number only)")
+    end
+
+    return true
+end
+
 function M.setup_command()
     vim.api.nvim_create_user_command('ThemeCheck', function(opts)
         local theme_name = opts.args
@@ -213,6 +248,12 @@ function M.setup_command()
             return themes.list_available_themes()
         end,
         desc = 'Check theme key resolution status'
+    })
+
+    vim.api.nvim_create_user_command('ThemeCheckLineNumbers', function()
+        M.check_line_numbers()
+    end, {
+        desc = 'Check line number highlight configuration and cursorline settings'
     })
 end
 

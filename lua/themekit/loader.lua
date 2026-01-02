@@ -12,12 +12,30 @@ local config = require("themekit.config")
 local M = {}
 
 -- Setup Vim environment for theme application
-local function setup_vim_environment(theme_name)
+local function setup_vim_environment(theme_name, theme)
     vim.opt.termguicolors = true
     vim.cmd('silent! highlight clear')
     if vim.fn.exists('syntax_on') then vim.cmd('silent! syntax reset') end
     vim.o.background = 'dark'
     vim.g.colors_name = theme_name or 'helix_theme'
+
+    -- Auto-enable cursorline if theme defines selected line number highlight
+    -- This provides Helix-style line number highlighting out of the box
+    if theme and theme['ui.linenr.selected'] then
+        local current_cursorline = vim.opt.cursorline:get()
+
+        -- Enable cursorline if not already enabled
+        if not current_cursorline then
+            vim.opt.cursorline = true
+
+            -- Set to 'number' only if cursorlineopt is empty/default
+            -- This preserves any user customization of cursorlineopt
+            local current_opt = vim.opt.cursorlineopt:get()
+            if not current_opt or #current_opt == 0 then
+                vim.opt.cursorlineopt = 'number'  -- Helix-style: highlight only line number
+            end
+        end
+    end
 end
 
 -- Prepare palette with pre-resolved background for alpha blending
@@ -110,8 +128,8 @@ function M.apply(theme, theme_name)
     color.clear_cache()
     highlight.clear_cursor()
 
-    -- Setup Vim environment
-    setup_vim_environment(theme_name)
+    -- Setup Vim environment (pass theme for cursorline detection)
+    setup_vim_environment(theme_name, theme)
 
     -- Prepare palette with background resolution
     local palette = prepare_palette(theme)
