@@ -11,12 +11,28 @@ local config = require("themekit.config")
 
 local M = {}
 
+-- Detect background mode ('light' or 'dark') from a hex color's perceived brightness
+local function detect_background_mode(hex)
+    if type(hex) ~= 'string' then return 'dark' end
+    local r, g, b = hex:match('^#(%x%x)(%x%x)(%x%x)$')
+    if not r then return 'dark' end
+    -- Rec. 601 luma: covers most theme bg detection cases without gamma
+    local luma = (0.299 * tonumber(r, 16)
+               + 0.587 * tonumber(g, 16)
+               + 0.114 * tonumber(b, 16)) / 255
+    return luma > 0.5 and 'light' or 'dark'
+end
+
 -- Setup Vim environment for theme application
 local function setup_vim_environment(theme_name, theme)
     vim.opt.termguicolors = true
     vim.cmd('silent! highlight clear')
     if vim.fn.exists('syntax_on') then vim.cmd('silent! syntax reset') end
-    vim.o.background = 'dark'
+
+    -- Match Neovim's background mode to the theme's actual background color so
+    -- built-in default highlights (Statement, etc.) use values that fit the bg.
+    local resolved_bg = color.resolve_background(theme, theme.palette or {})
+    vim.o.background = detect_background_mode(resolved_bg)
     vim.g.colors_name = theme_name or 'helix_theme'
 
     -- Auto-enable cursorline if theme defines selected line number highlight
